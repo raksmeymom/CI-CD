@@ -1,0 +1,21 @@
+environment: production
+replicaCount: 5
+
+image:
+  repository: ghcr.io/your-org/saas-app
+  tag: latest
+
+ingress:
+  host: yoursaas.com
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+canary:
+  enabled: false
+  weight: 0

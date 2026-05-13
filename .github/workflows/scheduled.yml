@@ -1,0 +1,86 @@
+name: Scheduled maintenance
+
+on:
+  schedule:
+    - cron: "0 2 * * *" # Daily at 02:00 UTC — DB backup + dependency audit
+    - cron: "0 3 * * 1" # Weekly Monday 03:00 UTC — dependency update PR
+  workflow_dispatch: # Manual trigger from GitHub UI
+
+jobs:
+  dependency-audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Run npm audit
+        run: npm audit --audit-level=high
+
+      - name: Run Snyk monitor (track over time)
+        uses: snyk/actions/node@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          command: monitor
+
+  dependency-update:
+    name: Dependency update PR
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '0 3 * * 1' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create Renovate-style update PR
+        uses: renovatebot/github-action@v40
+        with:
+          configurationFile: renovate.json
+          token: ${{ secrets.RENOVATE_TOKEN }}
+
+  db-backup:
+    name: Database backup
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Trigger RDS snapshot
+        run: |
+          SNAPSHOT_ID="scheduled-$(date +%Y%m%d-%H%M)"
+          aws rds create-db-snapshot \
+            --db-instance-identifier ${{ secrets.RDS_INSTANCE_ID }} \
+            --db-snapshot-identifier "$SNAPSHOT_ID"
+          echo "Snapshot $SNAPSHOT_ID created"
+
+      - name: Prune snapshots older than 30 days
+        run: ./scripts/prune-old-snapshots.sh
+        env:
+          RETENTION_DAYS: "30"
+          RDS_INSTANCE_ID: ${{ secrets.RDS_INSTANCE_ID }}
+
+  performance-benchmark:
+    name: Performance benchmark
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run k6 load test against staging
+        uses: grafana/k6-action@v0.3.1
+        with:
+          filename: tests/performance/load-test.js
+          flags: --out cloud
+        env:
+          K6_CLOUD_TOKEN: ${{ secrets.K6_CLOUD_TOKEN }}
+          BASE_URL: https://staging.yoursaas.com

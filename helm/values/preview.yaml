@@ -1,0 +1,21 @@
+environment: preview
+replicaCount: 1
+
+image:
+  repository: ghcr.io/your-org/saas-app
+  tag: latest
+
+ingress:
+  host: preview.yoursaas.com # overridden per-PR by the workflow
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+
+canary:
+  enabled: false
+  weight: 0
