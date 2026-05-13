@@ -1,6 +1,6 @@
 const express = require("express");
+const request = require("supertest");
 
-// Build the app inline — no server needed
 function buildApp() {
   const app = express();
   app.use(express.json());
@@ -34,7 +34,6 @@ function buildApp() {
   return app;
 }
 
-const request = require("supertest");
 const app = buildApp();
 
 describe("API integration tests", () => {
